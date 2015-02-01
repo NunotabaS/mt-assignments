@@ -13,7 +13,7 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxi
 f_data = "%s.%s" % (opts.train, opts.french)
 e_data = "%s.%s" % (opts.train, opts.english)
 
-sys.stderr.write("Training with model 1:\n")
+sys.stderr.write("Training with model 2:\n")
 bitext = [[sentence.strip().split() for sentence in pair] for pair in zip(open(f_data), open(e_data))[:opts.num_sents]]
 
 # maximize t
@@ -25,7 +25,7 @@ def best_alignment_greedy(e, f, t, q):
   for j in range(0, m):
     bestA, bestS = None , None
     for i in range(0, l + 1):
-      score = math.log(t[(e[j].lower(), f[i])]) + math.log(q[(i, j, m, l)])
+      score = math.log(t[(e[j].lower(), f[i])]) + math.log(q[(i, j, m, l + 1)])
       if bestA == None or bestS < score :
         bestA = i
         bestS = score
@@ -102,12 +102,14 @@ def get_tq(pairs, iterations = 10):
       
       # reset
       for (e, f) in EF:
-        t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
+        if count[(e.lower(), f)] > 0:
+          t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
       for m in lenE:
         for l in lenF:
           for j in range(0, m):
             for i in range(0, l +1):
-              q[(i, j, m, l + 1)] = countq[(i, j, m, l + 1)] / totalq[(j, m, l+1)]
+              if countq[(i, j, m, l + 1)] > 0:
+                q[(i, j, m, l + 1)] = countq[(i, j, m, l + 1)] / totalq[(j, m, l+1)]
   return t,q
   
 # train
@@ -116,7 +118,7 @@ t,q = get_tq(bitext, 5)
 for (f, e) in bitext:
   A = best_alignment_greedy(e, f, t, q)
   for i in range(0, len(e)):
-    sys.stdout.write("%i-%i " % (A[i] - 1, i))
+    sys.stdout.write("%i-%i " % (A[i] - 1 if A[i] > 0 else len(e), i))
   sys.stdout.write("\n")
     
 
