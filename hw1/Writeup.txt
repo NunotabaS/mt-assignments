@@ -1,0 +1,4 @@
+Model-1 /w case normalization of English, 5 Rounds of EM:
+  AER = 29.86
+Model-2 /w case normalization of English, 5 Rounds of EM:
+  AER = 
