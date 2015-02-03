@@ -1,4 +1,19 @@
 Model-1 /w case normalization of English, 5 Rounds of EM:
-  AER = 29.86
+  AER = 29.86 
+  
+  ./grade
+  Precision = 0.627837
+  Recall = 0.784024
+  AER = 0.319319
+
+Model-1 /w case normalization of English, 5 Rounds of EM (and alt treatment of NULL):
+  AER = 29.91
+
+  ./grade
+  Precision = 0.626324
+  Recall = 0.784024
+  AER = 0.320320
+
+
 Model-2 /w case normalization of English, 5 Rounds of EM:
   AER = 
