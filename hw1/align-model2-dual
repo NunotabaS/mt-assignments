@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import math
+from collections import defaultdict
+
+optparser = optparse.OptionParser()
+optparser.add_option("-d", "--data", dest="train", default="data/hansards", help="Data filename prefix (default=data)")
+optparser.add_option("-e", "--english", dest="english", default="e", help="Suffix of English filename (default=e)")
+optparser.add_option("-f", "--french", dest="french", default="f", help="Suffix of French filename (default=f)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
+(opts, _) = optparser.parse_args()
+f_data = "%s.%s" % (opts.train, opts.french)
+e_data = "%s.%s" % (opts.train, opts.english)
+
+sys.stderr.write("Training with model 2:\n")
+bitext = [[sentence.strip().split() for sentence in pair] for pair in zip(open(f_data), open(e_data))[:opts.num_sents]]
+
+# maximize t
+def best_alignment_greedy(e, f, t, q):
+  l = len(f)
+  m = len(e)
+  f = f[:]
+  f.insert(0, None)
+  a = []
+  for j in range(0, m):
+    bestA, bestS = None , None
+    for i in range(0, l + 1):
+      if q[(i, j, m, l + 1)]:
+        continue
+      score = math.log(t[(e[j].lower(), f[i])]) + math.log(q[(i, j, m, l + 1)])
+      if bestA == None or bestS < score :
+        bestA = i
+        bestS = score
+    a.append(bestA)
+  return a
+
+# use EM to get t(e|f) and q(i, j, m, l) values
+def get_tq(pairs, iterations = 10):
+  t = defaultdict(float)
+  q = defaultdict(float)
+  # get the words into sets
+  E = set(w.lower() for (f, e) in pairs for w in e)
+  sys.stderr.write("Generated set for E\n");
+  F = set(w for (f, e) in pairs for w in f)
+  F.add(None) # Add the None key
+  sys.stderr.write("Generated set for F\n");
+  
+  lenEF = set((len(e), len(f)) for (f, e) in pairs)
+  sys.stderr.write("Generated l, m possible values\n");
+  
+  EF = set((_e.lower(), _f) for (f, e) in pairs for _e in e for _f in (f + [None]))
+  sys.stderr.write("Generated set for E-F pairs\n");
+  
+  
+  # initialize t uniformly
+  lengthE = len(E)
+  for group in EF:
+    t[group] = 1.0 / lengthE
+  sys.stderr.write("Initialized t(e|f)\n")
+  
+  for (m,l) in lenEF:
+    for j in range(0, m):
+      for i in range(0, l + 1):
+        q[(i, j, m, l + 1)] = 1.0 / (l + 1)
+  sys.stderr.write("Initialized q(i,j,m,l)\n");
+      
+  for r in range(0, iterations):
+    sys.stderr.write("+")
+    total = defaultdict(float)
+    count = defaultdict(float)
+    totalq = defaultdict(float)
+    countq = defaultdict(float)
+    s_total = 0.0
+    
+    for (e, f) in EF:
+      total[f] = 0.0
+      count[(e, f)] = 0.0
+    for (m, l) in lenEF:
+      for j in range(0, m):
+        for i in range(0, l +1):
+          countq[(i, j, m, l + 1)] = 0.0
+          totalq[(j, m, l + 1)] = 0.0
+            
+    sys.stderr.write(".");
+    for (f, e) in pairs:
+      f = [None] + f
+      m = len(e)
+      l = len(f)
+      for j in range(0, m):
+        s_total= 0.0
+        for i in range(0, l):
+          s_total += t[(e[j].lower(), f[i])] * q[(i, j, m, l)]
+        for i in range(0, l):
+          c = t[(e[j].lower(), f[i])] * q[(i, j, m, l)] / s_total
+          count[(e[j].lower(), f[i])] += c
+          total[f[i]] += c
+          countq[(i, j, m, l)] += c
+          totalq[(j, m, l)] += c
+      #sys.stderr.write(".");
+      
+    # reset
+    for (e, f) in EF:
+      if count[(e.lower(), f)] > 0:
+        t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
+    for (m, l) in lenEF:
+      for j in range(0, m):
+        for i in range(0, l +1):
+          q[(i, j, m, l + 1)] = countq[(i, j, m, l + 1)] / totalq[(j, m, l+1)]
+  return t,q
+  
+# train
+t,q = get_tq(bitext, 5)
+tR, qR = get_tq([(e,f) for (f,e) in bitext], 5)
+
+for (f, e) in bitext:
+  A = best_alignment_greedy(e, f, t, q)
+  Ainv = best_alignment_greedy(f, e, tR, qR)
+  
+  SA = set((a - 1, i) for (i, a) in enumerate(A) if a != 0)
+  SAR = set((i, a - 1) for (i, a) in enumerate(Ainv) if a!= 0)
+  s = SA.union(SAR)
+  
+  for i in s:
+    sys.stdout.write("%i-%i " % i)
+  sys.stdout.write("\n")
+  
+  #for i in range(0, len(e)):
+  #  sys.stdout.write("%i-%i " % (A[i] - 1 if A[i] > 0 else len(e), i))
+  #sys.stdout.write("\n")
+    
+
