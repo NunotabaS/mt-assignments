@@ -70,7 +70,7 @@ def get_tq(pairs, iterations = 10):
     count = defaultdict(float)
     totalq = defaultdict(float)
     countq = defaultdict(float)
-    s_total = defaultdict(float)
+    s_total = 0.0
     
     for (e, f) in EF:
       total[f] = 0.0
@@ -81,35 +81,35 @@ def get_tq(pairs, iterations = 10):
           for i in range(0, l +1):
             countq[(i, j, m, l + 1)] = 0.0
             totalq[(j, m, l)] = 0.0
-    
+            
+    sys.stderr.write(".");
     for (f, e) in pairs:
       f = [None] + f
       m = len(e)
       l = len(f)
 
       for j in range(0, m):
-        s_total[e[j].lower()] = 0.0
+        s_total= 0.0
         for i in range(0, l):
-          s_total[e[j].lower()] += t[(e[j].lower(), f[i])] * q[(i, j, m, l)]
-
-      for j in range(0, m):
+          s_total += t[(e[j].lower(), f[i])] * q[(i, j, m, l)]
         for i in range(0, l):
-          c = t[(e[j].lower(), f[i])] * q[(i, j, m, l)] / s_total[e[j].lower()]
+          c = t[(e[j].lower(), f[i])] * q[(i, j, m, l)] / s_total
           count[(e[j].lower(), f[i])] += c
           total[f[i]] += c
           countq[(i, j, m, l)] += c
           totalq[(j, m, l)] += c
+      #sys.stderr.write(".");
       
-      # reset
-      for (e, f) in EF:
-        if count[(e.lower(), f)] > 0:
-          t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
-      for m in lenE:
-        for l in lenF:
-          for j in range(0, m):
-            for i in range(0, l +1):
-              if countq[(i, j, m, l + 1)] > 0:
-                q[(i, j, m, l + 1)] = countq[(i, j, m, l + 1)] / totalq[(j, m, l+1)]
+    # reset
+    for (e, f) in EF:
+      if count[(e.lower(), f)] > 0:
+        t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
+    for m in lenE:
+      for l in lenF:
+        for j in range(0, m):
+          for i in range(0, l +1):
+            if countq[(i, j, m, l + 1)] > 0:
+              q[(i, j, m, l + 1)] = countq[(i, j, m, l + 1)] / totalq[(j, m, l+1)]
   return t,q
   
 # train

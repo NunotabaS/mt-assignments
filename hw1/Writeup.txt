@@ -14,6 +14,13 @@ Model-1 /w case normalization of English, 5 Rounds of EM (and alt treatment of N
   Recall = 0.784024
   AER = 0.320320
 
+Model-1 /w Dual way agreement intersection. Take the intersection of the alignment sets E-F,F-E:
+  AER = 23.19
+  
+  ./grade
+  Precision = 0.860870
+  Recall = 0.662722
+  AER = 0.237189
 
 Model-2 /w case normalization of English, 5 Rounds of EM:
   AER = 
