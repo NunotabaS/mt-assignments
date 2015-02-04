@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import math
+from collections import defaultdict
+
+optparser = optparse.OptionParser()
+optparser.add_option("-1", "--model1", dest="ma", default="hw1.txt", help="Model 1 Results")
+optparser.add_option("-2", "--model2", dest="mb", default="hw1.txt", help="Model 2 Results")
+
+(opts, _) = optparser.parse_args()
+with open(opts.ma, "r") as f:
+  with open(opts.mb, "r") as g:
+    for lf in f:
+      lg = g.readline()
+      pairsF = lf.strip().split(" ")
+      pairsG = lg.strip().split(" ")
+      setF = set(pairsF)
+      setG = set(pairsG)
+      inter = setF.intersection(setG)
+      for pair in inter:
+        sys.stdout.write("%s " % pair)
+      sys.stdout.write("\n")
+

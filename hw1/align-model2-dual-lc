@@ -119,7 +119,7 @@ for (f, e) in bitext:
   
   SA = set((a - 1, i) for (i, a) in enumerate(A) if a != 0)
   SAR = set((i, a - 1) for (i, a) in enumerate(Ainv) if a!= 0)
-  s = SA.union(SAR)
+  s = SA.intersection(SAR)
   
   for i in s:
     sys.stdout.write("%i-%i " % i)

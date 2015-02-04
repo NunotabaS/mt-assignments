@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import math
+from collections import defaultdict
+
+optparser = optparse.OptionParser()
+optparser.add_option("-d", "--data", dest="train", default="data/hansards", help="Data filename prefix (default=data)")
+optparser.add_option("-e", "--english", dest="english", default="e", help="Suffix of English filename (default=e)")
+optparser.add_option("-f", "--french", dest="french", default="f", help="Suffix of French filename (default=f)")
+optparser.add_option("-r", "--rounds", dest="rounds", default="5", help="Rounds of EM to run (default=5)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
+(opts, _) = optparser.parse_args()
+rounds = int(opts.rounds)
+f_data = "%s.%s" % (opts.train, opts.french)
+e_data = "%s.%s" % (opts.train, opts.english)
+
+sys.stderr.write("Training with model 1:\n")
+bitext = [[sentence.strip().lower().split() for sentence in pair] for pair in zip(open(f_data), open(e_data))[:opts.num_sents]]
+
+# maximize t
+def best_alignment_greedy(e, f, t):
+  l = len(f)
+  m = len(e)
+  f = f[:]
+  f.insert(0, None)
+  a = []
+  for j in range(0, m):
+    bestA, bestS = None , None
+    for i in range(0, l + 1):
+      if bestA == None or bestS < math.log(t[(e[j].lower(), f[i])]):
+        bestA = i
+        bestS = math.log(t[(e[j].lower(), f[i])])
+    a.append(bestA)
+  return a
+  
+# finds best scored given e,f pair
+def best_alignment(e, f, t):
+  l = len(f)
+  m = len(e)
+  bestP, bestA = None, None
+  for a in get_align(l, m):
+    pscore = p(a, e, f, t)
+    if bestP == None or bestP < pscore:
+      bestP = pscore
+      bestA = a
+  return a
+
+# use EM to get t(e|f) values
+def get_t(pairs, iterations = 10):
+  t = defaultdict(float)
+  # get the words into sets
+  E = set(w.lower() for (f, e) in pairs for w in e)
+  sys.stderr.write("Generated set for E\n");
+  F = set(w for (f, e) in pairs for w in f)
+  sys.stderr.write("Generated set for F\n");
+  EF = set((_e.lower(), _f) for (f, e) in pairs for _e in e for _f in (f + [None]))
+  sys.stderr.write("Generated set for E-F pairs\n");
+  F.add(None) # Add the None key
+  
+  # initialize t uniformly
+  lengthE = len(E)
+  for group in EF:
+    t[group] = 1.0 / lengthE
+  
+  for r in range(0, iterations):
+    sys.stderr.write("+")
+    total = defaultdict(float)
+    count = defaultdict(float)
+    s_total = defaultdict(float)
+    
+    for (e, f) in EF:
+      total[f] = 0.0
+      count[(e, f)] = 0.0
+    
+    for (fo, e) in pairs:
+      f = [None] + fo
+      for _e in e:
+        s_total[_e.lower()] = 0.0
+        for _f in f:
+          s_total[_e.lower()] += t[(_e.lower(), _f)]
+      for _e in e:
+        for _f in f:
+          count[(_e.lower(), _f)] += t[(_e.lower(), _f)] / s_total[_e.lower()]
+          total[_f] += t[(_e.lower(), _f)] / s_total[_e.lower()]
+    for (e, f) in EF:
+      if count[(e.lower(), f)] > 0:
+        t[(e.lower(), f)] = count[(e.lower(), f)] / total[f]
+  return t
+  
+# train
+t = get_t(bitext, rounds)
+tinv = get_t([(e, f) for (f, e) in bitext], rounds)
+
+for (f, e) in bitext:
+  A = best_alignment_greedy(e, f, t)
+  # Get the inverse alignment
+  Ainv = best_alignment_greedy(f, e, tinv)
+  # Combine the two 
+  Apairs = [(a - 1, i) for (i, a) in enumerate(A) if a != 0]
+  Ainvpairs = [(i, a - 1) for (i, a) in enumerate(Ainv) if a!= 0]
+  
+  Ap = set(pair for pair in Apairs)
+  Bp = set(pair for pair in Ainvpairs)
+  s = Ap.intersection(Bp)
+
+  for i in s:
+    sys.stdout.write("%i-%i " % i)
+  sys.stdout.write("\n")
+    
+

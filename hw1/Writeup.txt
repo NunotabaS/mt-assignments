@@ -1,3 +1,10 @@
+-rw-r----- 1 cquanze cquanze  9324055 Feb  1 00:20 hw1.txt.0 - First run, case only 
+-rw-r----- 1 cquanze cquanze  9325559 Feb  1 01:51 hw1.txt.1 - Second run, Norm and null
+-rw-r----- 1 cquanze cquanze  5263817 Feb  3 01:45 hw1.txt.2 - Dual intersect
+-rw-r----- 1 cquanze cquanze  9420494 Feb  3 04:32 hw1.txt.3 - Model 2
+-rw-r----- 1 cquanze cquanze  5315458 Feb  3 21:23 hw1.txt.4 - Model 1 10 Round EM
+-rw-r----- 1 cquanze cquanze 14613198 Feb  3 20:25 hw1.txt.5 - Model 2 Union
+
 Model-1 /w case normalization of English, 5 Rounds of EM:
   AER = 29.86 
   
@@ -21,6 +28,40 @@ Model-1 /w Dual way agreement intersection. Take the intersection of the alignme
   Precision = 0.860870
   Recall = 0.662722
   AER = 0.237189
+  
+Model-1 /w case normalization duality, 10 Rounds of EM:
+  AER = 22.66
+  
+Model-2 /w normalization, no duality, 5 Rounds of EM:
+  AER = 22.55
+  
+  ./grade
+  Precision = 0.730711
+  Recall = 0.831361
+  AER = 0.235235
 
-Model-2 /w case normalization of English, 5 Rounds of EM:
-  AER = 
+Model-1+2 1/w duality 2/wo duality
+  AER = 21.70
+  
+  ./grade
+  Precision = 0.927152
+  Recall = 0.639053
+  AER = 0.225000
+
+Model-1+2 Union
+  AER = 20.87
+  
+  ./grade
+  Precision = 0.911315
+  Recall = 0.659763
+  AER = 0.216541
+
+Model-2 /w case normalization, duality!!!, 5 Rounds of EM:
+  AER = 16.59
+  
+  ./grade
+  Precision = 0.888041
+  Recall = 0.745562
+  AER = 0.177839
+
+
