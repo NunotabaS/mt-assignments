@@ -1,0 +1,148 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import models
+from collections import namedtuple
+
+# Helper adapted from grade.py
+def bitmap(sequence):
+  """ Generate a coverage bitmap for a sequence of indexes """
+  return reduce(lambda x,y: x|y, map(lambda i: long('1'+'0'*i,2), sequence), 0)
+  
+optparser = optparse.OptionParser()
+optparser.add_option("-i", "--input", dest="input", default="data/input", help="File containing sentences to translate (default=data/input)")
+optparser.add_option("-t", "--translation-model", dest="tm", default="data/tm", help="File containing translation model (default=data/tm)")
+optparser.add_option("-l", "--language-model", dest="lm", default="data/lm", help="File containing ARPA-format language model (default=data/lm)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to decode (default=no limit)")
+optparser.add_option("-v", "--verbose", dest="verbose", action="store_true", default=False,  help="Verbose mode (default=off)")
+opts = optparser.parse_args()[0]
+
+# TM contains tuples of words
+tm = models.TM(opts.tm, opts.k)
+lm = models.LM(opts.lm)
+french = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
+
+def extract_english(h): 
+  return "" if h.predecessor is None else "%s%s " % (extract_english(h.predecessor), h.phrase[2].english)
+
+# tm should translate unknown words as-is with probability 1
+for word in set(sum(french,())):
+  if (word,) not in tm:
+    tm[(word,)] = [models.phrase(word, 0.0)]
+
+sys.stderr.write("Decoding %s...\n" % (opts.input,))
+
+# Some helpers
+#
+def delta(t, s):
+  # This is the distortion function
+  return math.abs(t + 1 - s)
+  
+def yi(y, length):
+  # Given a translation, calculate values of y[i]
+  yi = [0] * length
+  current = y
+  while(current.predecessor != None):
+    s, t, phrase = current.phrase
+    for val in range(s, t + 1):
+      yi[val] += 1
+    current = current.predecessor
+  return yi
+
+def L(u, y):
+  # calculate the dual value for a given u, y
+  return y.logprob + 
+  
+# Translated => N, number of words translated in the source
+# last_span => (l, m) last span of words translated in the last part. l is the index of first word, m is index of last
+# end_prev => End index of previous phrase 
+# phrase => (s, t, phrase), current phrase
+# predecessor => previous y
+# Constraints Met => Bitmap |C| of constraints met
+y = namedtuple("y", "logprob", "lm_state", "translated", "last_span", "end_prev", "phrase", "predecessor", "bc")
+
+def argmax(u, french):
+  # Use viterbi to find best y given u
+  ih = y(0.0, lm.begin(), 0, (0, 0), 0, None, None, 0)
+  current = ih
+  while current.translated < len(french):
+    for i in range(0, len(french)):
+      for j in range(i+1, len(french) + 1):
+        if french[i:j] in lm:
+          translated = current.translated + (j - i)
+          for phrase in tm[french_sentence[i:j]]:
+            logprob = current.logprob + phrase.logprob
+            current_lm_state = current.lm_state
+            for word in phrase.english.split():
+              (current_lm_state, word_logprob) = lm.score(current_lm_state, word)
+              logprob += word_logprob
+          logprob += lm.end(current_lm_state) if j == len(french) else 0.0
+          current = y(logprob, current_lm_state, translated, (i, j), 0, (i, j, phrase), current, 0)
+        
+  return ih
+
+for french_sentence in french:
+  
+  N = len(french_sentence)
+  K = 10
+  G = 3
+  alpha = 0.1 # TODO: calculate using provided step formula
+  epsilon = 0.002
+  u = [0] * N
+  C = set() # Constraints
+  
+  yOptimal = None
+  
+  exitRound = False
+  while not exitRound:
+    converged = False
+    optimizeC = False
+    
+    t = 0
+    bestL, secondBestL, bestT, secondBestT = 0, 0, 0, 0
+    while not converged:
+      
+      # Greedily Find best y
+      y_star = argmax(u, french_sentence)
+      yi_star = yi(y_star, N)
+      if all(el==1 for el in yi_star):
+        exitRound = True
+        yOptimal = y_star
+      else:
+        for i in range(0, N):
+          u[i] = u[i] - alpha * (yi_star[i] - 1)
+      # Check convergence
+      converged = (float(bestL) - secondBestL) / (bestT - secondBestT) < epsilon
+      # Increment round id
+      t += 1
+    if exitRound:
+      break;
+    # Were' in the constraints case
+    sys.stderr.write("Entering constraint optimization!\n"
+    icounts = [0] * N
+    G = set()
+    for r in range(0, K):
+      sys.stderr.write("Constraint optimizing round %i\n" % r)
+      # Find best y
+      y_star = argmax(u, french_sentence)
+      yi_star = yi(y_star, N)
+      if all(el==1 for el in yi_star):
+        exitRound = True
+        yOptimal = y_star
+        break;
+      for yi_value in yi_star:
+        
+        if yi_value != 1:
+          
+          passed = False
+      if passed:
+        optimizeC = False
+        break;
+    if exitRound:
+      break;
+    # Optimize C
+    C = C.union(G)
+  
+  # Output the sentence
+  print extract_english(yOptimal)
+  
