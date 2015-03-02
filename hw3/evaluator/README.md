@@ -1,3 +1,13 @@
+## Training Version
+Need to install the following packages/libraries.
+
+- nltk (pip install nltk) : Used for stemming and classification
+- megam (http://www.umiacs.umd.edu/~hal/megam/) [This will also require ocaml support]
+    
+    Note: On ubuntu linux, if make fails , please change `WITHSTR` line to `WITHSTR =str.cma -cclib -lcamlstr`
+    instead.
+
+
 There are three Python programs here (`-h` for usage):
 
  - `./evaluate` evaluates pairs of MT output hypotheses by comparing the number of words they match in a reference translation

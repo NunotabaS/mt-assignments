@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+import argparse # optparse is deprecated
+from itertools import islice # slicing for iterators
+import nltk # this is for training
+from nltk.stem import porter # use the porter stemmer
+from nltk.classify import MaxentClassifier # Maximum entropy classifier
+
+nltk.config_megam('./megam_0.92/')
+
+def stem(sent):
+    porterstemmer = porter.PorterStemmer()
+    return [porterstemmer.stem(w.lower()) for w in sent]
+    
+def ngram(sent, gramcount = 1):
+    if gramcount < 1:
+        raise Exception("Must be at least unigrams")
+    return [tuple(sent[i:i + gramcount]) for i in range(0, len(sent) - gramcount + 1)]
+
+def intersection(h, ref):
+   refmap = {}
+   for word in ref:
+       if word in refmap:
+           refmap[word] += 1
+       else:
+           refmap[word] = 1
+   i = 0
+   for run in h:
+       if run in refmap and refmap[run] > 0:
+          i += 1
+          refmap[run] -= 1
+   return i
+
+def score (h, ref):
+    alpha = 0.9
+    m = intersection(h, ref)
+    if len(ref) == 0 or len(h) == 0:
+        # no reference
+        return 0, 0
+    P, R = float(m)/len(h), float(m)/len(ref)
+    return P, R
+
+def create_features(h, ref):
+    features = {}
+    P1, R1 = score(h, ref);
+    P2, R2 = score(ngram(h, 2), ngram(ref, 2));
+    P3, R3 = score(ngram(h, 3), ngram(ref, 3));
+    P4, R4 = score(ngram(h, 4), ngram(ref, 4))
+    features["precision1gram"] = P1
+    features["precision2gram"] = P2
+    features["precision3gram"] = P3
+    features["precision4gram"] = P4
+    
+    features["recall1gram"] = R1
+    features["recall2gram"] = R2
+    features["recall3gram"] = R3
+    features["recall4gram"] = R4
+    # also add features of stemmed data
+    hs, refs = stem(h), stem(ref)
+    P1s, R1s = score(hs, refs);
+    P2s, R2s = score(ngram(hs, 2), ngram(refs, 2));
+    P3s, R3s = score(ngram(hs, 3), ngram(refs, 3));
+    P4s, R4s = score(ngram(hs, 4), ngram(refs, 4))
+    features["sprecision1gram"] = P1s
+    features["sprecision2gram"] = P2s
+    features["sprecision3gram"] = P3s
+    features["sprecision4gram"] = P4s
+    
+    features["srecall1gram"] = R1s
+    features["srecall2gram"] = R2s
+    features["srecall3gram"] = R3s
+    features["srecall4gram"] = R4s
+    features["wordcountratio"] = float(len(h)) / len(ref)
+    return features
+    
+def main():
+    parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
+    parser.add_argument('-i', '--input', default='data/hyp1-hyp2-ref',
+            help='input file (default data/hyp1-hyp2-ref)')
+    parser.add_argument('-t', '--training', default='data/hyp1-hyp2-ref.partial',
+            help='input file (default data/hyp1-hyp2-ref.partial)')
+    parser.add_argument('-a', '--traininganswers', default='data/dev.partial',
+            help='input file (default data/dev.partial)')
+    parser.add_argument('-n', '--num_sentences', default=None, type=int,
+            help='Number of hypothesis pairs to evaluate')
+    # note that if x == [1, 2, 3], then x[:None] == x[:] == x (copy); no need for sys.maxint
+    opts = parser.parse_args()
+ 
+    # we create a generator and avoid loading all sentences into a list
+    def sentences():
+        with open(opts.input) as f:
+            for pair in f:
+                yield [sentence.strip().split() for sentence in pair.decode('utf8').split(' ||| ')]
+    # create the training data
+    def train():
+        with open(opts.training) as f:
+            with open(opts.traininganswers) as g:
+                for answ in g:
+                    pair = f.readline()
+                    label_raw = int(answ.strip())
+                    label_h1 = label_raw
+                    label_h2 = - label_raw
+                    sentences = [sentence.strip().split() for sentence in pair.decode('utf8').split(' ||| ')]
+                    yield (create_features(sentences[0], sentences[2]), label_h1)
+                    yield (create_features(sentences[1], sentences[2]), label_h2)
+    # train the classifier
+    data = [train for train in train()]
+    classifier = nltk.classify.maxent.train_maxent_classifier_with_megam(data, gaussian_prior_sigma=10, bernoulli=True)
+    
+    # note: the -n option does not work in the original code
+    for h1, h2, ref in islice(sentences(), opts.num_sentences):
+        cl1 = classifier.prob_classify(create_features(h1, ref))
+        ppos1, pneg1 = cl1.prob(1), cl1.prob(-1)
+        cl2 = classifier.prob_classify(create_features(h2, ref))
+        ppos2, pneg2 = cl2.prob(1), cl2.prob(-1)
+        h1_match = ppos1
+        h2_match = ppos2
+        print(1 if h1_match > h2_match else # \begin{cases}
+                (0 if h1_match == h2_match
+                    else -1)) # \end{cases}
+ 
+# convention to allow import of this file as a module
+if __name__ == '__main__':
+    main()
