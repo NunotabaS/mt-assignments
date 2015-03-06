@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import argparse # optparse is deprecated
 import sys
-import re
 from itertools import islice # slicing for iterators
 from nltk.stem import porter
 from nltk.corpus import wordnet
@@ -18,12 +17,9 @@ def stem(sent):
     return [porterstemmer.stem(w.decode("utf-8").lower()) for w in sent]
 
 def intersection_raw(h, ref):
-   refset = set(ref)
-   i = 0
-   for run in h:
-       if run in refset:
-          i += 1
-   return i
+   x = set(ref)
+   y = set(h)
+   return len(x.intersection(y))
 
 def intersection(h, ref, wordnetTest = True):
    refmap = {}
@@ -77,21 +73,21 @@ def chunkcalc(h, ref):
     return 1 + sorted(scores)[0]
 
 def score (h, ref, ngrams = False):
-    alpha = 0.81 #0.81 #0.9
-    beta = 0.83 # 0.83
-    gamma = 0.28 # 0.28
+    alpha = 0.9  #0.82 #0.81
+    beta = 3.0   #1.0 # 0.83
+    gamma = 0.5  #0.21 # 0.28
     if len(h) == 0 or len(ref) == 0:
         print h, ref
     m = max(intersection(h, ref, True), intersection(stem(h), stem(ref), False) if not ngrams else 0)
-    mu = m
+    mu = intersection_raw(h, ref)
     c = chunkcalc(h[:], ref[:])
-    P, R = (float(mu))/(len(h)), (float(mu))/(len(ref))
+    P, R = (float(mu))/(len(set(h))), (float(mu))/(len(set(ref)))
     score = P * R / (1 - alpha) * R + alpha * P
     penalty = gamma * ((float(c) / (m + 0.00001)) ** beta)
     return (1 - penalty) * score
     
 def main():
-    a, b = 0.8, 0.2
+    w = 0.7
     parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
     parser.add_argument('-i', '--input', default='data/hyp1-hyp2-ref',
             help='input file (default data/hyp1-hyp2-ref)')
@@ -104,22 +100,25 @@ def main():
     def sentences():
         with open(opts.input) as f:
             for pair in f:
-                yield [[re.sub(r"[^a-zA-Z0-9]", "", word) for word in  sentence.strip().lower().split()] for sentence in pair.split(' ||| ')]
+                yield [sentence.strip().split() for sentence in pair.split(' ||| ')]
  
     # note: the -n option does not work in the original code
     for h1, h2, ref in islice(sentences(), opts.num_sentences):
         h1_match = score(h1, ref)
         h2_match = score(h2, ref)
         
-        h1_match2 = score(ngram(stem(h1), 2), ngram(stem(ref), 2), True)
-        h2_match2 = score(ngram(stem(h2), 2), ngram(stem(ref), 2), True)
+        h1_match2 = score(ngram(h1, 2), ngram(ref, 2))
+        h2_match2 = score(ngram(h2, 2), ngram(ref, 2))
         
         diff1 = h1_match - h2_match
         diff2 = h1_match2 - h2_match2
-
-        diff = a * diff1 + b * diff2
-        print(1 if diff > 0.0001 else 
-                (-1 if diff < -0.0001
+        
+        diff = diff1 + diff2
+        #if diff1 * diff2 < 0:
+            # do not agree
+            #diff = diff1 + diff2
+        print(1 if diff > 0 else 
+                (-1 if diff < 0
                     else 0)) 
  
 # convention to allow import of this file as a module

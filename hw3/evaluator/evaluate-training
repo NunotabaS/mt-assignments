@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse # optparse is deprecated
+import argparse, sys # optparse is deprecated
 from itertools import islice # slicing for iterators
 import nltk # this is for training
 from nltk.stem import porter # use the porter stemmer
@@ -38,37 +38,76 @@ def score (h, ref):
         return 0, 0
     P, R = float(m)/len(h), float(m)/len(ref)
     return P, R
+    
+def chunkcalc(h, ref):
+    # recursively calculates chunkings
+    if len(h) == 0:
+        return 0
+    allMatches = []
+    for i in range(1, len(h) + 1):
+        foundMatch = False
+        currsrc = tuple(h[0:i])
+        for j in range(0, len(ref)):
+            if tuple(ref[j:j+i]) == currsrc:
+                allMatches.append((i, j))
+                foundMatch = True
+        if not foundMatch:
+            break;
+    if len(allMatches) == 0:
+        return 0 + chunkcalc(h[1:], ref)
+    # find best matches
+    sm = sorted(allMatches)
+    iref, jref = sm[-1]
+    smatches = [(i,j) for i,j in allMatches if i == iref]
+    if iref == 1:
+        smatches = smatches[0:1]
+    scores = [(chunkcalc(h[i:], ref[0:j] + [None] + ref[j+i:])) for i, j in smatches]
+    return 1 + sorted(scores)[0]
 
+def xscore (h, ref):
+    alpha = 0.9
+    if len(h) == 0 or len(ref) == 0:
+        print h, ref
+    m = intersection(h, ref)
+    mu = m
+    c = chunkcalc(h[:], ref[:])
+    P, R = (float(mu))/(len(h)), (float(mu))/(len(ref))
+    score = P * R / (1 - alpha) * R + alpha * P
+    penalty = 0.5 * ((float(c) / (m + 0.00001)) ** 3)
+    return (1 - penalty) * score
+    
 def create_features(h, ref):
     features = {}
     P1, R1 = score(h, ref);
     P2, R2 = score(ngram(h, 2), ngram(ref, 2));
     P3, R3 = score(ngram(h, 3), ngram(ref, 3));
     P4, R4 = score(ngram(h, 4), ngram(ref, 4))
+    features["xscore"] = xscore(h, ref)
     features["precision1gram"] = P1
     features["precision2gram"] = P2
-    features["precision3gram"] = P3
-    features["precision4gram"] = P4
+    #features["precision3gram"] = P3
+    #features["precision4gram"] = P4
     
     features["recall1gram"] = R1
     features["recall2gram"] = R2
-    features["recall3gram"] = R3
-    features["recall4gram"] = R4
+    #features["recall3gram"] = R3
+    #features["recall4gram"] = R4
     # also add features of stemmed data
     hs, refs = stem(h), stem(ref)
     P1s, R1s = score(hs, refs);
     P2s, R2s = score(ngram(hs, 2), ngram(refs, 2));
     P3s, R3s = score(ngram(hs, 3), ngram(refs, 3));
     P4s, R4s = score(ngram(hs, 4), ngram(refs, 4))
+    features["sxscore"] = xscore(hs, refs)
     features["sprecision1gram"] = P1s
     features["sprecision2gram"] = P2s
-    features["sprecision3gram"] = P3s
-    features["sprecision4gram"] = P4s
+    #features["sprecision3gram"] = P3s
+    #features["sprecision4gram"] = P4s
     
     features["srecall1gram"] = R1s
     features["srecall2gram"] = R2s
-    features["srecall3gram"] = R3s
-    features["srecall4gram"] = R4s
+    #features["srecall3gram"] = R3s
+    #features["srecall4gram"] = R4s
     features["wordcountratio"] = float(len(h)) / len(ref)
     return features
     
@@ -109,11 +148,13 @@ def main():
     # note: the -n option does not work in the original code
     for h1, h2, ref in islice(sentences(), opts.num_sentences):
         cl1 = classifier.prob_classify(create_features(h1, ref))
-        ppos1, pneg1 = cl1.prob(1), cl1.prob(-1)
+        ppos1, pneg1, pzero1 = cl1.prob(1), cl1.prob(-1), cl1.prob(0)
         cl2 = classifier.prob_classify(create_features(h2, ref))
-        ppos2, pneg2 = cl2.prob(1), cl2.prob(-1)
-        h1_match = ppos1
-        h2_match = ppos2
+        ppos2, pneg2, pzero2 = cl2.prob(1), cl2.prob(-1), cl2.prob(0)
+        rp, rz, rn = ppos1 > ppos2, pzero1 > pzero2, pneg1 > pneg2
+        h1_match = (1 if rp else 0) + (0.5 if rz else 0) + (-1 if rn else 0)
+        h2_match = (1 if not rp else 0) + (0.5 if not rz else 0) + (-1 if not rn else 0)
+        sys.stderr.write(" ".join([str(ppos1), str(pneg1), str(pzero1)]) + "\n")
         print(1 if h1_match > h2_match else # \begin{cases}
                 (0 if h1_match == h2_match
                     else -1)) # \end{cases}
