@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+import optparse
+import sys
+import bleu
+import math, random, re
+from operator import itemgetter
+import os.path as path
+import pickle
+
+def log (string):
+  sys.stderr.write(string + "\n")
+  
+# Calculates a smoothed value for bleu
+# Reference : SFU NLP Class
+# 
+# A modification of BLEU that returns a positive value even when some 
+# higher-order precisions are zero. From Liang et al. 2006 (Footnote 5):
+# http://aclweb.org/anthology-new/P/P06/P06-1096.pdf
+def compute_bleu(sent, ref):
+  stats = [stat for stat in bleu.bleu_stats(sent, ref)]
+  return sum([bleu.bleu(stats[:2+2*i])/math.pow(2,4-i+1) for i in xrange(1,5)])
+
+def find_untranslated (sent):
+  count = 0
+  for word in sent:
+    if re.match(r"[\u0400-\u0500]+", word):
+      count += 1
+  return count
+
+def extract_features(nbest):
+  (hyp, bleu, feats) = nbest
+  features = {'NULL': 1.0}
+  for feat in feats.split(' '):
+    (k, v) = feat.split('=')
+    features[k] = float(v)
+  features['len(s)'] = len(hyp.strip().split())
+  features['untrans'] = find_untranslated(hyp.strip().split())
+  featured['paren'] = 
+  return features
+
+optparser = optparse.OptionParser()
+optparser.add_option("-k", "--kbest-list", dest="input", default="data/dev+test.100best", help="100-best translation lists")
+optparser.add_option("-t", "--tau", dest="tau", default=5000, type="int", help="Sample count (default 5000)")
+optparser.add_option("-i", "--xi", dest="xi", default=100, type="int", help="Training data kept from samples (def 100)")
+optparser.add_option("-a", "--alpha", dest="alpha", default=0.1, type="float", help="Sampler acceptance cutoff")
+optparser.add_option("-e", "--eta", dest="eta", default=0.1, type="float", help="Perceptron learn rate")
+optparser.add_option("-m", "--rounds", dest="rounds", default=5, type="int", help="Perceptron training rounds")
+optparser.add_option("-r", "--reference", dest="reference", default="data/train.ref", help="Target language reference sentences")
+optparser.add_option("-x", "--train", dest="train", default="data/train.100best", help="Target language training sentences")
+optparser.add_option("-p", "--pickle", dest="pickle", default=False, help="Use pickle?")
+
+(opts, _) = optparser.parse_args()
+
+train_refs = [line.strip().split() for line in open(opts.reference)]
+train_sents = [pair.split(' ||| ') for pair in open(opts.train)]
+num_train = len(train_sents) / 100
+
+all_hyps = [pair.split(' ||| ') for pair in open(opts.input)]
+num_sents = len(all_hyps) / 100
+
+if path.isfile("PRO.training.bleu.pickle") and opts.pickle:
+  nbests = pickle.load(open("PRO.training.bleu.pickle"))
+  log("[-] Pickle Loaded")
+else:
+  # collect nbests
+  nbests = []
+  hypnum = 0
+  for s in xrange(0, num_train):
+    hyps_for_one_sent = train_sents[s * 100:s * 100 + 100]
+    nbests.append([])
+    for (num, hyp, feats) in hyps_for_one_sent:
+      nbests[s].append((hyp, compute_bleu(hyp.strip().split(), train_refs[s]), feats))
+  # create the pickle
+  pickle.dump(nbests, open("PRO.training.bleu.pickle", "w"))
+  log("[+] Pickle Generated")
+
+def gen_sample(size, nbest):
+  for i in xrange(0, size):
+    a = random.choice(nbest)
+    b = random.choice(nbest)
+    if math.fabs(a[1] - b[1]) > opts.alpha:
+      # only pick ones with a good difference in bleu
+      if a[1] > b[1]:
+        yield (a, b, a[1] - b[1])
+      else:
+        yield (b, a, b[1] - a[1])
+    else: 
+      continue
+
+# learn the weights
+weights = {'NULL'       : 0.0,
+           'p(e)'       : 0.0,
+           'p(e|f)'     : 0.0,
+           'p_lex(f|e)' : 0.0,
+           'len(s)'     : 0.0,
+           'untrans'    : 0.0
+           }
+for i in xrange(0, opts.rounds):
+  log("[.] Round %i" % i)
+  count = 0
+  for nbest in nbests:
+    count += 1
+    samples_top = sorted(gen_sample(opts.tau, nbest), reverse=True, key=itemgetter(2))[:opts.xi]
+    # perceptron updates
+    for (s1, s2, _) in samples_top:
+      # calculate
+      feats1 = extract_features(s1)
+      feats2 = extract_features(s2)
+      score1 = sum(feats1[w] * weights[w] for w in weights)
+      score2 = sum(feats2[w] * weights[w] for w in weights)
+      if score1 <= score2:
+        for w in weights:
+          weights[w] = weights[w] + opts.eta * (feats1[w] - feats2[w])
+          
+  log("[+] Weights: %s" % " ".join([k + ": " + str(weights[k]) for k in weights]))
+for s in xrange(0, num_sents):
+  hyps_for_one_sent = all_hyps[s * 100:s * 100 + 100]
+  (best_score, best) = (-1e300, '')
+  for (num, hyp, feats) in hyps_for_one_sent:
+    score = 0.0
+    feats = extract_features((hyp, None, feats))
+    score = sum(feats[w] * weights[w] for w in weights)
+   
+    if score > best_score:
+      (best_score, best) = (score, hyp)
+  try: 
+    sys.stdout.write("%s\n" % best)
+  except (Exception):
+    sys.exit(1)
+

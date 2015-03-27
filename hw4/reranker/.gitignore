@@ -1,0 +1,10 @@
+data/
+foo/
+megam_0.92/
+output/
+*.pyc
+extra.*
+default.out.*
+out.*
+*.pickle
+dict
